@@ -7,6 +7,7 @@
 #define G_SCALE 9.18f
 #define ROPE_SENS 2500.0f
 #define ROPE_MIN_LEN 30.0f
+#define ROPE_MAX_PIVOTS 16
 
 typedef enum {
 	PLAYER_STATE_IDLE,
@@ -63,9 +64,68 @@ static b8 aabb(entity_t* e, vec_t pos) {
 	return FALSE;
 }
 
+static b8 line_in_seg(vec_t l0, vec_t l1, vec_t s0, vec_t s1, vec_t* out) {
+	f32 x0 = l0.x;
+	f32 y0 = l0.y;
+	f32 x1 = l1.x;
+	f32 y1 = l1.y;
+
+	f32 x2 = s0.x;
+	f32 y2 = s0.y;
+	f32 x3 = s1.x;
+	f32 y3 = s1.y;
+
+	f32 d = (x0 - x1) * (y2 - y3) - (y0 - y1) * (x2 - x3);
+	if (fabsf(d) < EPS) {
+		return FALSE;
+	}
+
+	f32 px = ((x0 * y1 - y0 * x1) * (x2 - x3) - (x0 - x1) * (x2 * y3 - y2 * x3)) / d;
+	f32 py = ((x0 * y1 - y0 * x1) * (y2 - y3) - (y0 - y1) * (x2 * y3 - y2 * x3)) / d;
+
+	if ((px < fmin(x0, x1) || px > fmax(x0, x1)) ||
+		(px < fmin(x2, x3) || px > fmax(x2, x3)) ||
+		(py < fmin(y0, y1) || py > fmax(y0, y1)) ||
+		(py < fmin(y2, y3) || py > fmax(y2, y3))) {
+		return FALSE;
+	}
+
+	if (out) {
+		out->x = px;
+		out->y = py;
+	}
+
+	return TRUE;
+}
+
+static b8 rope_intersects(rope_t* r, vec_t pos, vec_t* out) {
+	for (u32 i = 0; i < wall_count; i++) {
+		wall_t* w = &walls[i];
+
+		vec_t p0 = VEC2(w->rect.x, w->rect.y);
+		vec_t p1 = VEC2(w->rect.x + w->rect.w, w->rect.y);
+		vec_t p2 = VEC2(w->rect.x, w->rect.y + w->rect.h);
+		vec_t p3 = VEC2(w->rect.x + w->rect.w, w->rect.y + w->rect.h);
+
+		vec_t sides[4][2] = { {p0, p1}, {p1, p3}, {p3, p2}, {p2, p0} };
+
+		for (u32 j = 0; j < 4; j++) {
+			vec_t point;
+
+			if (line_in_seg(pos, r->pivot, sides[j][0], sides[j][1], &point)) {
+				if (out) {
+					*out = point;
+				}
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
+
 static vec_t rope_update(rope_t* r, vec_t dir, f32 dt) {
 	if (!r) {
-		return VEC_ZERO;
+		return VEC_NULL;
 	}
 
 	const f32 damping = 2.0f;
@@ -92,6 +152,24 @@ static vec_t rope_update(rope_t* r, vec_t dir, f32 dt) {
 	f32 y = r->pivot.y + len * cos(ang);
 
 	vec_t pos = VEC2(x, y);
+	vec_t hit;
+
+	const f32 min_dist = 10.0f;
+
+	if (rope_intersects(r, pos, &hit)) {
+		f32 dist = VEC_DIST(hit, r->pivot);
+		if (dist > min_dist) {
+			vec_t tip = pos;
+
+			r->pivot = hit;
+
+			f32 dx = tip.x - r->pivot.x;
+			f32 dy = tip.y - r->pivot.y;
+
+			len = sqrtf(dx * dx + dy * dy);
+			ang = atan2f(dx, dy);
+		}
+	}
 
 	if (aabb(&player, pos)) {
 		vel = r->angular_vel * -bounce_str;
@@ -107,20 +185,25 @@ static vec_t rope_update(rope_t* r, vec_t dir, f32 dt) {
 	return pos;
 }
 
-static void rope_fire(vec_t dest) {
+static void rope_fire(rope_t* r, vec_t dest) {
+	if (!r) {
+		return;
+	}
+
 	vec_t delta = VEC_DELTA(dest, ENTITY_CENTER(player));
-	f32 tan_vel = player.velocity.x * cos(rope_test.angle) - player.velocity.y * sin(rope_test.angle);
-	rope_test.len = VEC_MAG(delta);
-	rope_test.pivot = dest;
-	rope_test.angle = 0.0f;
-	rope_test.angular_vel = tan_vel;
+	f32 tan_vel = player.velocity.x * cos(r->angle) - player.velocity.y * sin(r->angle);
+
+	r->len = VEC_MAG(delta);
+	r->pivot = dest;
+	r->angle = 0.0f;
+	r->angular_vel = tan_vel;
 	player_state = PLAYER_STATE_ROPE;
 }
 
 void game_start(void) {
 	vec_t center = VEC2(WINDOW_W / 2, WINDOW_H / 2);
 	ENTITY_MOVE(&player, center);
-	rope_fire(center);
+	rope_fire(&rope_test, center);
 }
 
 void game_update(f32 dt) {
@@ -166,7 +249,7 @@ void game_update(f32 dt) {
 			player_state = PLAYER_STATE_FLY;
 		}
 		else {
-			rope_fire(VEC2(new_pos.x, new_pos.y - 150.0f));
+			rope_fire(&rope_test, VEC2(new_pos.x, new_pos.y - 150.0f));
 		}
 	}
 }

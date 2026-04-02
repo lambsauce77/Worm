@@ -30,19 +30,26 @@ typedef u8 b8;
 #define TRUE ((b8)1)
 #define FALSE ((b8)0)
 
+#define EPS (1e-6f)
+
 typedef struct {
 	f32 x, y, z, w;
+	u8 null_flag;
 }vec_t;
 
-#define VEC_ZERO ((vec_t){ 0, 0, 0, 0 })
-#define VEC2(x, y) ((vec_t){ (x), (y), 0, 0 })
-#define VEC3(x, y, z) ((vec_t){ (x), (y), (z), 0 })
-#define VEC4(x, y, z, w) ((vec_t){ (x), (y), (z), (w) })
+#define VEC_NULL ((vec_t){ .null_flag = 1 })
+#define VEC_ZERO ((vec_t){ 0, 0, 0, 0, .null_flag = 0 })
+#define VEC2(x, y) ((vec_t){ (x), (y), 0, 0, .null_flag = 0 })
+#define VEC3(x, y, z) ((vec_t){ (x), (y), (z), 0, .null_flag = 0 })
+#define VEC4(x, y, z, w) ((vec_t){ (x), (y), (z), (w), .null_flag = 0 })
+
 #define VEC_CMP(v0, v1) ( (b8)( ((v0).x == (v1).x) && ((v0).y == (v1).y) && ((v0).z == (v1).z) && ((v0).w == (v1).w) ) )
 #define VEC_IS_ZERO(v) ((b8)(VEC_CMP((v), VEC_ZERO)))
+#define VEC_IS_NULL(v) ((b8)((v).null_flag))
 #define VEC_DOT(v0, v1) (((v0).x * (v1).x) + ((v0).y * (v1).y) + ((v0).z * (v1).z) + ((v0).w * (v1).w))
 #define VEC_MAG(v) (sqrtf(VEC_DOT((v),(v))))
 #define VEC_DELTA(v0, v1) (VEC4((v0).x - (v1).x, (v0).y - (v1).y, (v0).z - (v1).z, (v0).w - (v1).w))
+#define VEC_DIST(v0, v1) (VEC_MAG(VEC_DELTA((v0), (v1))))
 
 #define VEC_ADD(v0, v1) \
 do{ \
