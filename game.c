@@ -2,9 +2,10 @@
 #include "entity.h"
 #include "gfx.h"
 #include "input.h"
+#include "wall.h"
 
 #define G_SCALE 9.18f
-#define ROPE_SENS 2000.0f
+#define ROPE_SENS 2500.0f
 #define ROPE_MIN_LEN 30.0f
 
 typedef enum {
@@ -35,44 +36,91 @@ rope_t rope_test = {
 	.pivot = {WINDOW_W/2, WINDOW_H/2}
 };
 
+u32 wall_count = 2;
+wall_t* walls = (wall_t[]){
+	{ .clr = {0, 0, 255, 255}, .rect = {200, WINDOW_H / 2, 50, 200} },
+	{.clr = {0, 0, 255, 255}, .rect = {WINDOW_W - 200, WINDOW_H / 2, 50, 200} }
+};
+
+static b8 aabb(entity_t* e, vec_t pos) {
+	if (!e) {
+		return FALSE;
+	}
+
+	vec_t epos = VEC2(pos.x - e->rect.w * 0.5f, pos.y - e->rect.h * 0.5f);
+
+	for (u32 i = 0; i < wall_count; i++) {
+		SDL_FRect* wrect = &walls[i].rect;
+
+		if (epos.x < wrect->x + wrect->w &&
+			epos.x + e->rect.w > wrect->x &&
+			epos.y < wrect->y + wrect->h &&
+			epos.y + e->rect.h > wrect->y) {
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
 static vec_t rope_update(rope_t* r, vec_t dir, f32 dt) {
 	if (!r) {
 		return VEC_ZERO;
 	}
 
 	const f32 damping = 2.0f;
-	const f32 gravity = G_SCALE * 100.0f;	
-	const f32 len_mult = 0.5f;
+	const f32 gravity = G_SCALE * 300.0f;	
+	const f32 len_mult = 0.3f;
+	const f32 bounce_str = 2.0f;
 
-	r->len += dir.y * len_mult * dt;
+	f32 len = r->len;
+	f32 vel = r->angular_vel;
+	f32 ang = r->angle;
 
-	if (r->len <= 0.0f) {
-		r->len = ROPE_MIN_LEN;
+	len += dir.y * len_mult * dt;
+
+	if (len <= 0.0f) {
+		len = ROPE_MIN_LEN;
 	}
 
-	f32 alpha = -(gravity / r->len) * sin(r->angle) + (dir.x / r->len) - (damping * r->angular_vel);
+	f32 alpha = -(gravity / len) * sin(ang) + (dir.x / len) - (damping * vel);
 
-	r->angular_vel += alpha * dt;
-	r->angle += r->angular_vel * dt;
+	vel += alpha * dt;
+	ang += vel * dt;
 
-	f32 x = r->pivot.x + r->len * sin(r->angle);
-	f32 y = r->pivot.y + r->len * cos(r->angle);
+	f32 x = r->pivot.x + len * sin(ang);
+	f32 y = r->pivot.y + len * cos(ang);
 
-	return VEC2(x, y);
+	vec_t pos = VEC2(x, y);
+
+	if (aabb(&player, pos)) {
+		vel = r->angular_vel * -bounce_str;
+		f32 sign = (vel > 0) - (vel < 0);
+		len = r->len + sign;
+		ang = r->angle;
+	}
+
+	r->len = len;
+	r->angular_vel = vel;
+	r->angle = ang;
+
+	return pos;
 }
 
 static void rope_fire(vec_t dest) {
-	player_state = PLAYER_STATE_ROPE;
-	rope_test.pivot = dest;
 	vec_t delta = VEC_DELTA(dest, ENTITY_CENTER(player));
-	rope_test.len = VEC_MAG(delta);
-	rope_test.angle = 0.0f;
 	f32 tan_vel = player.velocity.x * cos(rope_test.angle) - player.velocity.y * sin(rope_test.angle);
+	rope_test.len = VEC_MAG(delta);
+	rope_test.pivot = dest;
+	rope_test.angle = 0.0f;
 	rope_test.angular_vel = tan_vel;
+	player_state = PLAYER_STATE_ROPE;
 }
 
 void game_start(void) {
-	rope_fire(VEC2(WINDOW_W / 2, WINDOW_H / 2));
+	vec_t center = VEC2(WINDOW_W / 2, WINDOW_H / 2);
+	ENTITY_MOVE(&player, center);
+	rope_fire(center);
 }
 
 void game_update(f32 dt) {
@@ -102,6 +150,9 @@ void game_update(f32 dt) {
 			break;
 
 		case PLAYER_STATE_FLY:
+			if (aabb(&player, new_pos)) {
+				VEC_SCALE(&player.velocity, -0.9f);
+			}
 			player.velocity.y += G_SCALE * dt;
 			VEC_ADD(&new_pos, player.velocity);
 			break;
@@ -121,6 +172,10 @@ void game_update(f32 dt) {
 }
 
 void game_render(void) {
+	for (u32 i = 0; i < wall_count; i++) {
+		gfx_draw_wall(&walls[i]);
+	}
+
 	if (player_state == PLAYER_STATE_ROPE) {
 		gfx_draw_line(ENTITY_CENTER(player), rope_test.pivot);
 	}

@@ -20,6 +20,15 @@ void gfx_draw_entity(entity_t* e) {
 	SDL_RenderFillRectF(renderer, &e->rect);
 }
 
+void gfx_draw_wall(wall_t* w) {
+	if (!renderer || !w) {
+		return;
+	}
+
+	SDL_SetRenderDrawColor(renderer, w->clr.r, w->clr.g, w->clr.b, w->clr.a);
+	SDL_RenderFillRectF(renderer, &w->rect);
+}
+
 void gfx_draw_line(vec_t v0, vec_t v1) {
 	if (!renderer) {
 		return;

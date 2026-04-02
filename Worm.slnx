@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="Worm.vcxproj" />
+  <Project Path="Worm.vcxproj" Id="c5893717-1fea-4beb-9dbd-160b07db4f8c" />
 </Solution>
