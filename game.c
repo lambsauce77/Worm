@@ -163,30 +163,47 @@ static vec_t rope_update(rope_t* r, vec_t dir, f32 dt) {
 
 	const f32 min_dist = 10.0f;
 
-	if (rope_intersects(r, pos, &hit) && r->pivot_count + 1 < ROPE_MAX_PIVOTS) {
-		f32 dist = VEC_DIST(hit, pivot);
-		if (dist > min_dist) {
-			vec_t tip = pos;
+	if (rope_intersects(r, pos, &hit) && VEC_DIST(hit, pivot) > min_dist && r->pivot_count + 1 < ROPE_MAX_PIVOTS) {
+		vec_t tip = pos;
 
-			r->pivots[r->pivot_count++] = pivot;
-			pivot = hit;
-			r->pivots[r->pivot_count] = pivot;
+		r->pivots[r->pivot_count++] = pivot;
+		pivot = hit;
+		r->pivots[r->pivot_count] = pivot;
 
-			f32 dx = tip.x - pivot.x;
-			f32 dy = tip.y - pivot.y;
+		f32 dx = tip.x - pivot.x;
+		f32 dy = tip.y - pivot.y;
 
-			len = sqrtf(dx * dx + dy * dy);
-			ang = atan2f(dx, dy);
-		}
+		len = sqrtf(dx * dx + dy * dy);
+		ang = atan2f(dx, dy);
 	}
 
-	if (r->pivot_count > 0) {
-		vec_t a = r->pivots[r->pivot_count - 1];
-		vec_t b = r->pivots[r->pivot_count];
-		vec_t c = ENTITY_CENTER(player);
+	//else if (r->pivot_count > 0) {
+	//	vec_t a = r->pivots[r->pivot_count - 1];
+	//	vec_t b = pivot;
+	//	vec_t c = ENTITY_CENTER(player);
 
-		// if something rope_count--
-	}
+	//	vec_t ba = VEC_DELTA(a, b);
+	//	vec_t cb = VEC_DELTA(c, b);
+
+	//	f32 dot = VEC_DOT(ba, cb);
+	//	f32 mag = VEC_MAG(ba) * VEC_MAG(cb);
+
+	//	if (mag > 0.0f) {
+	//		f32 theta = dot / mag;
+	//		f32 angle = acos(theta);
+
+	//		if (angle >= 0.0f && angle <= EPS) {
+	//			r->pivot_count--;
+	//			pivot = r->pivots[r->pivot_count];
+
+	//			f32 dx = pos.x - pivot.x;
+	//			f32 dy = pos.y - pivot.y;
+
+	//			len = sqrtf(dx * dx + dy * dy);
+	//			ang = atan2f(dx, dy);
+	//		}
+	//	}
+	//}
 
 	if (aabb(&player, pos)) {
 		vel = r->angular_vel * -bounce_str;

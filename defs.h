@@ -31,6 +31,7 @@ typedef u8 b8;
 #define FALSE ((b8)0)
 
 #define EPS (1e-6f)
+#define PI (3.14159265359f)
 
 typedef struct {
 	f32 x, y, z, w;
