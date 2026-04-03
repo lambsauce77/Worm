@@ -5,9 +5,9 @@
 #include "wall.h"
 
 #define G_SCALE 9.18f
-#define ROPE_SENS 2500.0f
+#define ROPE_SENS 3000.0f
 #define ROPE_MIN_LEN 30.0f
-#define ROPE_MAX_PIVOTS 16
+#define ROPE_MAX_PIVOTS 32
 
 typedef enum {
 	PLAYER_STATE_IDLE,
@@ -22,7 +22,8 @@ typedef struct {
 	f32 angle;
 	f32 angular_vel;
 	f32 len;
-	vec_t pivot;
+	u32 pivot_count;
+	vec_t pivots[ROPE_MAX_PIVOTS];
 }rope_t;
 
 entity_t player = {
@@ -34,7 +35,7 @@ rope_t rope_test = {
 	.angle = 0.5f,
 	.angular_vel = 0.0f,
 	.len = 100.0f,
-	.pivot = {WINDOW_W/2, WINDOW_H/2}
+	.pivot_count = 0
 };
 
 u32 wall_count = 2;
@@ -99,6 +100,10 @@ static b8 line_in_seg(vec_t l0, vec_t l1, vec_t s0, vec_t s1, vec_t* out) {
 }
 
 static b8 rope_intersects(rope_t* r, vec_t pos, vec_t* out) {
+	if (!r) {
+		return FALSE;
+	}
+
 	for (u32 i = 0; i < wall_count; i++) {
 		wall_t* w = &walls[i];
 
@@ -112,7 +117,7 @@ static b8 rope_intersects(rope_t* r, vec_t pos, vec_t* out) {
 		for (u32 j = 0; j < 4; j++) {
 			vec_t point;
 
-			if (line_in_seg(pos, r->pivot, sides[j][0], sides[j][1], &point)) {
+			if (line_in_seg(pos, r->pivots[r->pivot_count], sides[j][0], sides[j][1], &point)) {
 				if (out) {
 					*out = point;
 				}
@@ -132,10 +137,12 @@ static vec_t rope_update(rope_t* r, vec_t dir, f32 dt) {
 	const f32 gravity = G_SCALE * 300.0f;	
 	const f32 len_mult = 0.3f;
 	const f32 bounce_str = 2.0f;
+	const f32 max_velocity = 10.0f;
 
 	f32 len = r->len;
 	f32 vel = r->angular_vel;
 	f32 ang = r->angle;
+	vec_t pivot = r->pivots[r->pivot_count];
 
 	len += dir.y * len_mult * dt;
 
@@ -148,27 +155,37 @@ static vec_t rope_update(rope_t* r, vec_t dir, f32 dt) {
 	vel += alpha * dt;
 	ang += vel * dt;
 
-	f32 x = r->pivot.x + len * sin(ang);
-	f32 y = r->pivot.y + len * cos(ang);
+	f32 x = pivot.x + len * sin(ang);
+	f32 y = pivot.y + len * cos(ang);
 
 	vec_t pos = VEC2(x, y);
 	vec_t hit;
 
 	const f32 min_dist = 10.0f;
 
-	if (rope_intersects(r, pos, &hit)) {
-		f32 dist = VEC_DIST(hit, r->pivot);
+	if (rope_intersects(r, pos, &hit) && r->pivot_count + 1 < ROPE_MAX_PIVOTS) {
+		f32 dist = VEC_DIST(hit, pivot);
 		if (dist > min_dist) {
 			vec_t tip = pos;
 
-			r->pivot = hit;
+			r->pivots[r->pivot_count++] = pivot;
+			pivot = hit;
+			r->pivots[r->pivot_count] = pivot;
 
-			f32 dx = tip.x - r->pivot.x;
-			f32 dy = tip.y - r->pivot.y;
+			f32 dx = tip.x - pivot.x;
+			f32 dy = tip.y - pivot.y;
 
 			len = sqrtf(dx * dx + dy * dy);
 			ang = atan2f(dx, dy);
 		}
+	}
+
+	if (r->pivot_count > 0) {
+		vec_t a = r->pivots[r->pivot_count - 1];
+		vec_t b = r->pivots[r->pivot_count];
+		vec_t c = ENTITY_CENTER(player);
+
+		// if something rope_count--
 	}
 
 	if (aabb(&player, pos)) {
@@ -176,6 +193,10 @@ static vec_t rope_update(rope_t* r, vec_t dir, f32 dt) {
 		f32 sign = (vel > 0) - (vel < 0);
 		len = r->len + sign;
 		ang = r->angle;
+	}
+
+	if (vel > max_velocity) {
+		vel = max_velocity;
 	}
 
 	r->len = len;
@@ -193,8 +214,9 @@ static void rope_fire(rope_t* r, vec_t dest) {
 	vec_t delta = VEC_DELTA(dest, ENTITY_CENTER(player));
 	f32 tan_vel = player.velocity.x * cos(r->angle) - player.velocity.y * sin(r->angle);
 
+	r->pivot_count = 0;
+	r->pivots[0] = dest;
 	r->len = VEC_MAG(delta);
-	r->pivot = dest;
 	r->angle = 0.0f;
 	r->angular_vel = tan_vel;
 	player_state = PLAYER_STATE_ROPE;
@@ -259,8 +281,18 @@ void game_render(void) {
 		gfx_draw_wall(&walls[i]);
 	}
 
+	// weird but works
 	if (player_state == PLAYER_STATE_ROPE) {
-		gfx_draw_line(ENTITY_CENTER(player), rope_test.pivot);
+		vec_t prev_pos = rope_test.pivots[0];
+
+		for (u32 i = 0; i < rope_test.pivot_count + 1; i++) {
+			vec_t cur_pos = rope_test.pivots[i];
+
+			gfx_draw_line(prev_pos, cur_pos);
+			prev_pos = cur_pos;
+		}
+
+		gfx_draw_line(rope_test.pivots[rope_test.pivot_count], ENTITY_CENTER(player));
 	}
 
 	gfx_draw_entity(&player);
